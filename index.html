@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cognitive Journal</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.6.0/dist/full.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com/3.3.1"></script>
+    <style>
+        * {font-family: sans-serif;}
+    </style>
+</head>
+<body>
+    <!--div id="app" class="max-w-screen-lg m-auto"-->
+    <div id="app">
+        <div class="max-w-screen-lg m-auto">
+            <div class="navbar bg-base-100">
+                <div class="navbar-start">
+                <a class="btn btn-ghost normal-case text-xl">Cognitive</a>
+                </div>
+                <div class="navbar-center hidden lg:flex">
+                <ul class="menu menu-horizontal px-1">
+                    <li><router-link to="/journal" :class="{'active': $route.path == '/journal'}">Дневник</router-link></li>
+                    <li><router-link to="/recommendations" :class="{'active': $route.path == '/recommendations'}">Рекомендации</router-link></li>
+                </ul>
+                </div>
+                <div class="navbar-end">
+                <!-- <a class="btn">Button</a> -->
+                    <ul class="menu menu-horizontal px-1">
+                        <li tabindex="0">
+                            <details>
+                                <summary>{{ projectName }}</summary>
+                                <ul class="p-2">
+                                    <li v-for="project in projects">
+                                        <a :href="'?project=' + project">{{ project }}</a>
+                                    </li>
+                                </ul>
+                            </details>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="bg-gray-100 py-10">
+            <div class="max-w-screen-lg m-auto">
+                <router-view></router-view>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue-router@4.2.1/dist/vue-router.global.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue-demi@0.14.5/lib/index.iife.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pinia@2.1.3/dist/pinia.iife.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+    <script type="module">
+        const { createRouter, createWebHistory, createWebHashHistory } = VueRouter
+        import { createORM, Model, useRepo, mapRepos, Repository } from 'https://cdn.jsdelivr.net/npm/pinia-orm@1.6.7/+esm';
+        import createPersistPlugin from 'https://bloogrox.github.io/pinia-local-storage-plugin/index.js';
+
+
+        const formatDateMixin = {
+            methods: {
+                formatDate(dateString) {
+                    const date = dayjs(dateString);
+                    return date.format('DD-MM-YYYY');
+                }
+            }
+        }
+
+        /*** Project */
+        function getProjectName() {
+            let urlParams = new URLSearchParams(window.location.search);
+            return urlParams.has("project") ? urlParams.get("project") : "default";
+        }
+
+        /*** Pinia */
+        const pinia = Pinia.createPinia();
+
+        pinia.use(createPersistPlugin({bucket: getProjectName()}));
+
+        /*** ORM Init **/
+        const orm_config = {
+            model: {
+                withMeta: true,
+                hidden: [],
+                visible: ['*']
+            }
+        }
+        pinia.use(createORM(orm_config));
+
+
+        /***************************************************
+         *
+         * Pinia store
+         *
+         * */
+        // const pStore = Pinia.defineStore('project', {
+        //     state: () => ({
+        //         script: {
+        //             behavior: [],
+        //             problem: [],
+        //             goal: [],
+        //             cause: [],
+        //             alternative: [],
+        //         }
+        //     }),
+        // });
+
+
+        /***************************************************
+         *
+         * ORM Models
+         *
+         * */
+
+        class Problem extends Model {
+
+            static entity = 'problems'
+
+            static hidden = []
+
+            static fields () {
+                return {
+                    id: this.uid(),
+                    title: this.string(''),
+                    situation: this.string(''),
+
+                    emotions: this.hasMany(Emotion, 'problem_id').onDelete('cascade'),
+                    thoughts: this.hasMany(Thought, 'problem_id').onDelete('cascade'),
+                    behaviors: this.hasMany(Behavior, 'problem_id').onDelete('cascade'),
+                }
+            }
+        }
+
+
+        class Emotion extends Model {
+
+            static entity = 'emotions'
+
+            static hidden = []
+
+            static fields () {
+                return {
+                    id: this.uid(),
+                    title: this.string(''),
+                    cause: this.string(''),
+                    solution: this.string(''),
+
+                    problem_id: this.attr(null),
+                    problem: this.belongsTo(Problem, 'problem_id'),
+                }
+            }
+        }
+
+
+        class Thought extends Model {
+
+            static entity = 'thoughts'
+
+            static hidden = []
+
+            static fields () {
+                return {
+                    id: this.uid(),
+                    title: this.string(''),
+                    analysis: this.string(''),
+                    function: this.string(''),
+                    rule: this.string(''),
+                    assumption: this.string(''),
+                    belief: this.string(''),
+                    adaptive_belief: this.string(''),
+                    new_philosophy: this.string(''),
+                    // new_alternative: this.string(''),
+
+                    problem_id: this.attr(null),
+                    problem: this.belongsTo(Problem, 'problem_id'),
+                    // belief_id: this.attr(null),
+                    // belief: this.belongsTo(Belief, 'belief_id'),
+                }
+            }
+        }
+
+        class Behavior extends Model {
+
+            static entity = 'behaviors'
+
+            static hidden = []
+
+            static fields () {
+                return {
+                    id: this.uid(),
+                    title: this.string(''),
+                    problem_id: this.attr(null),
+                    problem: this.belongsTo(Problem, 'problem_id'),
+                    type: this.string(''),
+                    consequences: this.string(''),
+                    value: this.string(''),
+                    intention: this.string(''),
+                }
+            }
+        }
+
+
+        class Rule extends Model {
+
+            static entity = 'rules'
+
+            static hidden = []
+
+            static fields () {
+                return {
+                    id: this.uid(),
+                    text: this.string(''),
+
+                    problem_id: this.attr(null),
+                    problem: this.belongsTo(Problem, 'problem_id'),
+                }
+            }
+        }
+
+        class Assumption extends Model {
+
+            static entity = 'assumptions'
+
+            static hidden = []
+
+            static fields () {
+                return {
+                    id: this.uid(),
+                    text: this.string(''),
+
+                    problem_id: this.attr(null),
+                    problem: this.belongsTo(Problem, 'problem_id'),
+                }
+            }
+        }
+
+
+        class Value extends Model {
+
+            static entity = 'values'
+
+            static hidden = []
+
+            static fields () {
+                return {
+                    id: this.uid(),
+                    text: this.string(''),
+
+                    problem_id: this.attr(null),
+                    problem: this.belongsTo(Problem, 'problem_id'),
+                }
+            }
+        }
+
+
+        class Argument extends Model {
+
+            static entity = 'arguments'
+
+            static hidden = []
+
+            static fields () {
+                return {
+                    id: this.uid(),
+                    text: this.string(''),
+
+                    problem_id: this.attr(null),
+                    problem: this.belongsTo(Problem, 'problem_id'),
+                }
+            }
+        }
+
+
+        class Insight extends Model {
+
+            static entity = 'insights'
+
+            static hidden = []
+
+            static fields () {
+                return {
+                    id: this.uid(),
+                    text: this.string(''),
+
+                    problem_id: this.attr(null),
+                    problem: this.belongsTo(Problem, 'problem_id'),
+                    // arguments: this.belongsToMany(Argument, ArgumentInsight, 'insight_id', 'argument_id').onDelete('cascade'),
+                }
+            }
+        }
+
+
+        class Action extends Model {
+
+            static entity = 'actions'
+
+            static hidden = []
+
+            static fields () {
+                return {
+                    id: this.uid(),
+                    text: this.string(''),
+
+                    problem_id: this.attr(null),
+                    problem: this.belongsTo(Problem, 'problem_id'),
+                    // insights: this.belongsToMany(Insight, ArgumentInsight, 'insight_id', 'argument_id').onDelete('cascade'),
+                }
+            }
+        }
+
+        /***************************************************
+         *
+         * Components
+         *
+         */
+
+        const Home = {
+            mounted() {
+                router.push('/journal')
+            },
+            template: `.`
+        }
+
+
+        const JournalComp = {
+            data() {
+                return {
+                    problem: {
+                        title: ''
+                    }
+                }
+            },
+            computed: {
+                problems() {
+                    return useRepo(Problem, pinia)
+                        .orderBy(x => x._meta.createdAt, 'desc')
+                        .get()
+                }
+            },
+            methods: {
+                save_problem() {
+                    const obj = {
+                        title: this.problem.title
+                    }
+                    const problem = useRepo(Problem, pinia).save(obj)
+                    this.problem.title = ''
+
+                    router.push('/problems/' + problem.id)
+                }
+            },
+            template: `
+                <div>
+                    <div class="flex justify-end">
+                        <button
+                            @click="$refs.problem_add_modal.showModal()"
+                            class="btn btn-outline btn-xs rounded-full">
+                            Добавить проблему
+                        </button>
+                    </div>
+                    <!--p class="text-2xl text-gray-400">Дневник</p-->
+
+                    <div class="mt-10">
+                        <div class="flex flex-col gap-1">
+                            <div v-for="problem in problems" class="p-4 w-full first:rounded-t-xl last:rounded-b-xl text-sm bg-white">
+                                <router-link :to="'/problems/' + problem.id">
+                                    <div>{{ problem.title }}</div>
+                                </router-link>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <dialog ref="problem_add_modal" class="modal">
+                    <form method="dialog" class="modal-box">
+                    <h3 class="font-bold text-lg">Добавить проблему</h3>
+                    <div>
+                        <label class="label">Ответ</label>
+                        <input type="text" v-model="problem.title" class="input input-bordered w-full">
+                    </div>
+                    <div class="modal-action">
+                        <button @click="save_problem" class="btn btn-primary">Добавить</button>
+                        <button class="btn btn-outline">Отмена</button>
+                    </div>
+                    </form>
+                </dialog>
+            `
+        }
+
+        const ProblemComp = {
+            data() {
+                return {
+                    tabs: ['Мысли', 'Эмоции', 'Поведение'],
+                    active_tab: 'Мысли',
+                    thought: {
+                        title: ''
+                    },
+                    inp_emotion: '',
+                    inp_behavior: '',
+                }
+            },
+            computed: {
+                problem_id() {
+                    return this.$route.params.id
+                },
+                problem() {
+                    return useRepo(Problem, pinia)
+                        .with('thoughts')
+                        .with('emotions')
+                        .with('behaviors')
+                        .find(this.problem_id)
+                },
+
+            },
+            methods: {
+                add_thought() {
+                    const obj = {
+                        title: this.thought.title,
+                        problem_id: this.problem_id
+                    }
+                    useRepo(Thought, pinia).save(obj)
+                    this.thought.title = ''
+                },
+                del_thought(id) {
+                    useRepo(Thought, pinia).destroy(id)
+                },
+                del() {
+                    router.push('/journal')
+                    useRepo(Problem, pinia).destroy(this.problem_id)
+                },
+                update() {
+                    useRepo(Problem, pinia).save(this.problem)
+                },
+                add_emotion() {
+                    const obj = {
+                        title: this.inp_emotion,
+                        problem_id: this.problem_id
+                    }
+                    useRepo(Emotion, pinia).save(obj)
+                    this.inp_emotion = ''
+                },
+                del_emotion(id) {
+                    useRepo(Emotion, pinia).destroy(id)
+                },
+                add_behavior() {
+                    const obj = {
+                        title: this.inp_behavior,
+                        problem_id: this.problem_id
+                    }
+                    useRepo(Behavior, pinia).save(obj)
+                    this.inp_behavior = ''
+                },
+                del_behavior(id) {
+                    useRepo(Behavior, pinia).destroy(id)
+                },
+            },
+            template: `
+                <div>
+
+                    <a @click.prevent="del" class="float-right link text-xs">Удалить</a>
+
+                    <div class="text-sm breadcrumbs">
+                        <ul>
+                            <li><router-link to="/journal">Дневник</router-link></li>
+                            <li>{{ problem.title }}</li>
+                        </ul>
+                    </div>
+
+                    <div class="mt-10">
+                        <input type="text" v-model="problem.title" @input="update" class="input input-bordered w-full" />
+                    </div>
+
+                    <div class="mt-10 bg-white rounded-xl p-5">
+                        <div class="grid grid-cols-1 gap-5">
+                            <div>
+                                <label class="label">
+                                    <span class="label-text">Ситуация</span>
+                                </label>
+                                <textarea v-model="problem.situation" @input="update" rows="10" class="textarea textarea-bordered w-full"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-10">
+
+                        <div role="tablist" class="tabs tabs-boxed text-center">
+                            <a v-for="tab in tabs"
+                                @click.prevent="active_tab=tab"
+                                role="tab"
+                                class="tab"
+                                :class="{'tab-active': tab==active_tab}">
+
+                                {{ tab }}
+                            </a>
+                        </div>
+
+                        <div class="mt-5 bg-white rounded-xl p-5">
+
+                            <div v-if="active_tab=='Мысли'">
+                                <!--div class="mt-3 flex flex-col gap-1">
+                                    <div v-for="thought in problem.thoughts" class="group bg-yellow-100">
+                                        <span>{{ thought.text }}</span>
+                                        <div class="dropdown invisible group-hover:visible float-right">
+                                            <label tabindex="0"><a href="" @click.prevent="">...</a></label>
+                                            <ul tabindex="0" class="dropdown-content z-[1] p-2 shadow menu bg-slate-600 rounded-box w-52 text-white">
+                                                <li><a href="" @click.prevent="del_thought(thought.id)">Удалить</a></li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div-->
+                                <PiniaModelCrud
+                                    titleField="title"
+                                    :items="problem.thoughts"
+                                    :linkBuilder="instance => '/thought/' + instance.id"
+                                    @delHook="instance => {del_thought(instance.id)}"
+                                />
+                                <div class="mt-5">
+                                    <a @click.prevent="$refs.thought_add_modal.showModal()" class="link text-sm text-gray-500">Добавить</a>
+                                </div>
+
+                            </div>
+
+                            <div v-else-if="active_tab=='Эмоции'">
+                                <div>
+                                    <div class="flex flex-row flex-wrap gap-2">
+                                        <div v-for="emotion in problem.emotions" class="group shadow rounded-lg w-full bg-red-400 text-white">
+                                            <router-link :to="'/emotion/' + emotion.id">
+                                                <div class="p-4">
+                                                    <span>{{ emotion.title }}</span>
+                                                    <div class="dropdown invisible group-hover:visible float-right">
+                                                        <label tabindex="0"><a href="" @click.prevent="">...</a></label>
+                                                        <ul tabindex="0" class="dropdown-content z-[1] p-2 shadow menu bg-slate-600 rounded-box w-52 text-white">
+                                                            <li><a href="" @click.prevent="del_emotion(emotion.id)">Удалить</a></li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </router-link>
+                                        </div>
+                                    </div>
+                                    <div class="mt-10">
+                                        <input type="text" v-model="inp_emotion" class="input input-bordered" @keypress.enter="add_emotion">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-else-if="active_tab=='Поведение'">
+                                <div>
+                                    <div class="flex flex-row flex-wrap gap-2">
+                                        <div v-for="behavior in problem.behaviors" class="group shadow rounded-lg w-full bg-blue-500 text-white">
+                                            <router-link :to="'/behavior/' + behavior.id">
+                                                <div class="p-4">
+                                                    <span>{{ behavior.title }}</span>
+                                                    <div class="dropdown invisible group-hover:visible float-right">
+                                                        <label tabindex="0"><a href="" @click.prevent="">...</a></label>
+                                                        <ul tabindex="0" class="dropdown-content z-[1] p-2 shadow menu bg-slate-600 rounded-box w-52 text-white">
+                                                            <li><a href="" @click.prevent="del_behavior(behavior.id)">Удалить</a></li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </router-link>
+                                        </div>
+                                    </div>
+                                    <div class="mt-10">
+                                        <input type="text" v-model="inp_behavior" class="input input-bordered" @keypress.enter="add_behavior">
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <dialog ref="thought_add_modal" class="modal">
+                    <form method="dialog" class="modal-box">
+                    <h3 class="font-bold text-lg">Добавить мысль</h3>
+                    <div>
+                        <label class="label">Заголовок</label>
+                        <input type="text" v-model="thought.title" class="input input-bordered w-full">
+                    </div>
+                    <div class="modal-action">
+                        <button @click="add_thought" class="btn btn-primary">Добавить</button>
+                        <button class="btn btn-outline">Отмена</button>
+                    </div>
+                    </form>
+                </dialog>
+            `
+        }
+
+        // <dialog ref="argument_add_modal" class="modal">
+        //             <form method="dialog" class="modal-box">
+        //             <h3 class="font-bold text-lg">Добавить аргумент</h3>
+        //             <div class="mt-3">
+        //                 <ul class="text-xs">
+        //                     <li>Какие преимущества даёт уверенность в том, что (негативное предположение)?</li>
+        //                     <li>Каковы недостатки вашей уверенности в том, что (негативное предположение)?</li>
+        //                     <li>Приведите список преимуществ для анти-(правила)?</li>
+        //                     <li>Как мешает вам это ?</li>
+        //                     <li>Есть ли факты, которые подкрепляют это убеждение?</li>
+        //                     <li>Какие факты опровергают это убеждение?</li>
+        //                     <li>В чем нелогичность этого убеждения?</li>
+        //                     <li>Как можно опровергнуть это утверждение?</li>
+        //                     <li>Каковы негативные последствия, если продолжать верить в это убеждение?</li>
+        //                     <li>В чем скрытая выгода продолжать верить в это убеждение и ничего не менять?</li>
+        //                     <li>Что хорошего может случиться со мной, если я откажусь от этого убеждения и буду действовать вопреки ему?</li>
+        //                     <li>Есть ли негативные последствия отказа от этого убеждения и действий вопреки ему?</li>
+        //                 </ul>
+        //             </div>
+        //             <div class="mt-3">
+        //                 <label class="label">
+        //                     <span class="label-text">Текст</span>
+        //                 </label>
+        //                 <textarea type="text" v-model="argument.text" class="textarea textarea-bordered w-full"></textarea>
+        //             </div>
+        //             <div class="modal-action">
+        //                 <button @click="add_argument" class="btn btn-primary">Добавить</button>
+        //                 <button class="btn btn-outline">Отмена</button>
+        //             </div>
+        //             </form>
+        //         </dialog>
+
+
+        //         <dialog ref="action_add_modal" class="modal">
+        //             <form method="dialog" class="modal-box">
+        //             <h3 class="font-bold text-lg">Добавить действие</h3>
+        //             <div class="mt-3">
+        //                 <ul class="text-xs">
+        //                     <li>Какое поведение будет соответствовать новому убеждению?</li>
+        //                     <li>Что следует делать вопреки старому убеждению?</li>
+        //                     <li>Каким поведенческим экспериментом можно проверить новое адаптивное предположение?</li>
+        //                 </ul>
+        //             </div>
+        //             <div class="mt-3">
+        //                 <label class="label">
+        //                     <span class="label-text">Текст</span>
+        //                 </label>
+        //                 <textarea type="text" v-model="action.text" class="textarea textarea-bordered w-full"></textarea>
+        //             </div>
+        //             <div class="modal-action">
+        //                 <button @click="add_action" class="btn btn-primary">Добавить</button>
+        //                 <button class="btn btn-outline">Отмена</button>
+        //             </div>
+        //             </form>
+        //         </dialog>
+
+        const ThoughtComp = {
+            data() {
+                return {
+                }
+            },
+            computed: {
+                thought_id() {
+                    return this.$route.params.id
+                },
+                thought() {
+                    return useRepo(Thought, pinia)
+                        .with('problem')
+                        // .with('belief')
+                        .find(this.thought_id)
+                },
+            },
+            methods: {
+                update() {
+                    useRepo(Thought, pinia).save(this.thought)
+                }
+            },
+            template: `
+                <div>
+
+                    <div class="text-sm breadcrumbs">
+                        <ul>
+                            <li><router-link :to="'/problems/' + thought.problem.id">{{ thought.problem.title }}</router-link></li>
+                            <li>{{ thought.title }}</li>
+                        </ul>
+                    </div>
+
+                    <div class="mt-10">
+                        <div>
+                            <label class="label"><span class="label-text">Заголовок</span></label>
+                            <input type="text" v-model="thought.title" @input="update" class="input input-bordered w-full" />
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Помогает ... (Потребность, Функция)</span></label>
+                            <input type="text" v-model="thought.function" @input="update" class="input input-bordered w-full" />
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Правило</span></label>
+                            <input type="text" v-model="thought.rule" @input="update" class="input input-bordered w-full" />
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Предположение</span></label>
+                            <input type="text" v-model="thought.assumption" @input="update" class="input input-bordered w-full" />
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Промежуточное убеждение</span></label>
+                            <input type="text" v-model="thought.belief" @input="update" class="input input-bordered w-full" />
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Анализ старого убеждения</span></label>
+                            <textarea type="textarea" v-model="thought.analysis" @input="update" class="textarea textarea-bordered w-full"></textarea>
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Адаптивное убеждение</span></label>
+                            <input type="text" v-model="thought.adaptive_belief" @input="update" class="input input-bordered w-full" />
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Новая философия</span></label>
+                            <textarea type="textarea" v-model="thought.new_philosophy" @input="update" class="textarea textarea-bordered w-full"></textarea>
+                        </div>
+                        <!--div>
+                            <label class="label"><span class="label-text">Новый способ удовлетворения потребности</span></label>
+                            <textarea type="textarea" v-model="thought.new_alternative" @input="update" class="textarea textarea-bordered w-full"></textarea>
+                        </div-->
+                    </div>
+
+                    <div class="mt-10">
+                        <p>Упражнения</p>
+                    </div>
+
+
+                </div>
+            `
+        }
+
+        const BehaviorComp = {
+            data() {
+                return {
+                    DCBs: [
+                        "Гиперкомпенсация: Агрессия или враждебность",
+                        "Гиперкомпенсация: Доминирование или чрезмерное самоутверждение",
+                        "Гиперкомпенсация: Поиск признания или поиск статуса",
+                        "Гиперкомпенсация: Манипулирование и эксплуатация",
+                        "Гиперкомпенсация: Пассивно-агрессивность или бунт",
+                        "Сдача: Соглашательство или зависимость",
+                        "Избегание: Социальная изоляция или чрезмерная автономия",
+                        "Избегание: Компульсивный поиск стимуляции",
+                        "Избегание: Аддиктивное самоуспокоение",
+                        "Избегание: Психологическая изоляция",
+                    ]
+                }
+            },
+            computed: {
+                behavior_id() {
+                    return this.$route.params.id
+                },
+                behavior() {
+                    return useRepo(Behavior, pinia)
+                        .with('problem')
+                        .find(this.behavior_id)
+                },
+            },
+            methods: {
+                update() {
+                    useRepo(Behavior, pinia).save(this.behavior)
+                }
+            },
+            template: `
+                <div>
+
+                    <div class="text-sm breadcrumbs">
+                        <ul>
+                            <li><router-link :to="'/problems/' + behavior.problem.id">{{ behavior.problem.title }}</router-link></li>
+                            <li>{{ behavior.title }}</li>
+                        </ul>
+                    </div>
+
+                    <div class="mt-10">
+                        <div>
+                            <label class="label"><span class="label-text">Заголовок</span></label>
+                            <input type="text" v-model="behavior.title" @input="update" class="input input-bordered w-full" />
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Дефектное копинг поведение</span></label>
+                            <select v-model="behavior.type" @change="update" class="select select-bordered w-full">
+                                <option value=""></option>
+                                <option v-for="item in DCBs" :value="item">{{ item }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Последствия</span></label>
+                            <input type="text" v-model="behavior.consequences" @input="update" class="input input-bordered w-full" />
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Ценность</span></label>
+                            <input type="text" v-model="behavior.value" @input="update" class="input input-bordered w-full" />
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Намерение</span></label>
+                            <textarea type="textarea" v-model="behavior.intention" @input="update" class="textarea textarea-bordered w-full"></textarea>
+                        </div>
+                    </div>
+
+                </div>
+            `
+        }
+
+        const EmotionComp = {
+            data() {
+                return {}
+            },
+            computed: {
+                emotion_id() {
+                    return this.$route.params.id
+                },
+                emotion() {
+                    return useRepo(Emotion, pinia)
+                        .with('problem')
+                        .find(this.emotion_id)
+                },
+            },
+            methods: {
+                update() {
+                    useRepo(Emotion, pinia).save(this.emotion)
+                }
+            },
+            template: `
+                <div>
+
+                    <div class="text-sm breadcrumbs">
+                        <ul>
+                            <li><router-link :to="'/problems/' + emotion.problem.id">{{ emotion.problem.title }}</router-link></li>
+                            <li>{{ emotion.title }}</li>
+                        </ul>
+                    </div>
+
+                    <div class="mt-10">
+                        <div>
+                            <label class="label"><span class="label-text">Заголовок</span></label>
+                            <input type="text" v-model="emotion.title" @input="update" class="input input-bordered w-full" />
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Причина эмоции</span></label>
+                            <textarea type="textarea" v-model="emotion.cause" @input="update" class="textarea textarea-bordered w-full"></textarea>
+                        </div>
+                        <div>
+                            <label class="label"><span class="label-text">Решение</span></label>
+                            <textarea type="textarea" v-model="emotion.solution" @input="update" class="textarea textarea-bordered w-full"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="mt-10">
+                        <p class="">Упражнения</p>
+                        <ul class="list-disc">
+                            <li>..</li>
+                            <li></li>
+                            <li></li>
+                        </ul>
+                    </div>
+
+                </div>
+            `
+        }
+
+        const RecommendationsComp = {
+            computed: {
+                thoughts() {
+                    return useRepo(Thought, pinia)
+                        .where('new_philosophy', v => v.length > 0)
+                        .get()
+                        .map(x => {
+                            return {
+                                problem: x.title,
+                                diagnosys: x.belief,
+                                solution: x.new_philosophy,
+                            }
+                        })
+                },
+                intentions() {
+                    return useRepo(Behavior, pinia)
+                        .where('intention', v => v.length > 0)
+                        .get()
+                        .map(x => {
+                            return {
+                                problem: x.title,
+                                diagnosys: x.type,
+                                solution: x.intention,
+                            }
+                        })
+                },
+                items() {
+                    return this.thoughts.concat(this.intentions)
+                }
+            },
+            template: `
+                <div>
+
+                    <div>
+                        <table class="table border-separate  border-spacing-2">
+                            <thead>
+                                <tr>
+                                    <th>Проблема</th>
+                                    <th>Диагностика</th>
+                                    <th>Решение</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="item in items">
+                                    <td class="bg-red-400 rounded-xl text-white">{{ item.problem }}</td>
+                                    <td class="bg-yellow-300 rounded-xl">{{ item.diagnosys }}</td>
+                                    <td class="bg-green-600 rounded-xl text-white">{{ item.solution }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+            `
+        }
+
+
+        const PiniaModelCrud = {
+            props: ['items', 'titleField', 'linkBuilder'],
+            emits: ['delHook'],
+            template: `
+                <div>
+                    <div class="flex flex-col gap-1">
+                        <div v-for="item in items" class="group p-3 text-white bg-slate-500 rounded-lg">
+                            <router-link :to="linkBuilder(item)">
+                                <div>
+                                    <span>{{ item[titleField] }}</span>
+                                    <div class="dropdown invisible group-hover:visible float-right">
+                                        <label tabindex="0"><a href="" @click.prevent="">...</a></label>
+                                        <ul tabindex="0" class="dropdown-content z-[1] p-2 shadow menu bg-slate-600 rounded-box w-52 text-white">
+                                            <li><a href="" @click.prevent="$emit('delHook', item)">Удалить</a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </router-link>
+                        </div>
+                    </div>
+                    <!--div>
+                        <button class="link text-sm text-gray-500">Добавить</button>
+                    </div-->
+                </div>
+            `
+        }
+
+
+
+        /***************************************************
+         *
+         * Router
+         *
+         **/
+         const router = createRouter({
+            history: createWebHashHistory(),
+            routes: [
+                { path: '/', component: Home },
+                { path: '/journal', component: JournalComp },
+                { path: '/problems/:id', component: ProblemComp },
+                { path: '/thought/:id', component: ThoughtComp },
+                { path: '/behavior/:id', component: BehaviorComp },
+                { path: '/emotion/:id', component: EmotionComp },
+                { path: '/recommendations', component: RecommendationsComp },
+            ],
+        });
+
+        const rootComp = {
+            computed: {
+                // ...Pinia.mapWritableState(pStore, [
+                //     'script'
+                // ]),
+                projectName() {
+                    return getProjectName()
+                },
+                projects() {
+                    return Object.keys(localStorage).filter(x => x != this.projectName)
+                }
+            },
+        }
+
+        const app = Vue.createApp(rootComp);
+        app.use(pinia);
+        app.use(router);
+        app.component('PiniaModelCrud', PiniaModelCrud)
+        app.mount("#app");
+    </script>
+</body>
+</html>
